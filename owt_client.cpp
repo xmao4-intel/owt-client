@@ -30,6 +30,13 @@ class VideoRenderer : public owt::base::VideoRendererInterface {
     if (!renderer_)
       return;
 
+    if (buffer->resolution.width != tex_width_ || buffer->resolution.height != tex_height_) {
+      SDL_DestroyTexture(texture_);
+      tex_width_ = buffer->resolution.width;
+      tex_height_ = buffer->resolution.height;
+      texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_YV12, SDL_TEXTUREACCESS_STREAMING, tex_width_, tex_height_);
+    }
+
     if (buffer->type == VideoBufferType::kI420) {
       uint32_t w = buffer->resolution.width;
       uint8_t *y = buffer->buffer;
@@ -39,7 +46,25 @@ class VideoRenderer : public owt::base::VideoRendererInterface {
     } else {
       SDL_UpdateTexture(texture_, nullptr, buffer->buffer, buffer->resolution.width * 4);
     }
-    SDL_RenderCopy(renderer_, texture_, NULL, NULL);
+
+    // texture has different orientation to display. Assume display is landscape.
+    if (tex_width_ < tex_height_) {
+      int w, h;
+      SDL_Rect dst_rect;
+      double angle = 270;
+      SDL_Point center;
+
+      SDL_GetWindowSize(win_, &w, &h);
+      dst_rect.x = (w - h) / 2;
+      dst_rect.y = (h - w) / 2;
+      dst_rect.w = h;
+      dst_rect.h = w;
+      center.x = h / 2;
+      center.y = w / 2;
+      SDL_RenderCopyEx(renderer_, texture_, NULL, &dst_rect, angle, &center, SDL_FLIP_NONE);
+    } else {
+      SDL_RenderCopy(renderer_, texture_, NULL, NULL);
+    }
     SDL_RenderPresent(renderer_);
   };
   VideoRendererType Type() override {
@@ -54,12 +79,14 @@ class VideoRenderer : public owt::base::VideoRendererInterface {
           std::cout << "Failed to create renderer" << std::endl;
           return;
       }
-      texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_YV12, SDL_TEXTUREACCESS_STREAMING, 1280, 720);
+      texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_YV12, SDL_TEXTUREACCESS_STREAMING, tex_width_, tex_height_);
     }
  private:
     SDL_Window* win_ = nullptr;
     SDL_Renderer* renderer_ = nullptr;
     SDL_Texture* texture_ = nullptr;
+    int tex_width_ = 1280;
+    int tex_height_ = 720;
 };
 
 class AudioPlayer : public owt::base::AudioPlayerInterface {
